@@ -1,0 +1,38 @@
+{
+  "ticket_number": "FT-1001",
+  "contractor": "Demo Electrical LLC",
+  "customer": "Example General Contractor",
+  "project": "Office Renovation",
+  "work_date": "2026-10-18",
+  "description": "Installed additional conduit and wiring after a field change requested by the site supervisor.",
+  "labor": [
+    {
+      "description": "Journeyman electrician",
+      "workers": 2,
+      "hours_per_worker": 3,
+      "hourly_rate": 85
+    },
+    {
+      "description": "Electrical apprentice",
+      "workers": 1,
+      "hours_per_worker": 3,
+      "hourly_rate": 45
+    }
+  ],
+  "materials": [
+    {
+      "description": "EMT conduit",
+      "quantity": 40,
+      "unit": "feet",
+      "unit_price": 2.5
+    },
+    {
+      "description": "Electrical connectors",
+      "quantity": 12,
+      "unit": "pieces",
+      "unit_price": 3.75
+    }
+  ],
+  "markup_percent": 10,
+  "tax_rate_percent": 0
+}
