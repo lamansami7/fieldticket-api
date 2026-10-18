@@ -1,7 +1,8 @@
 import argparse
+import json
 import os
 import subprocess
-import sys
+from pathlib import Path
 
 from postgres_customers import create_postgres_key
 from postgres_db import get_postgres_connection
@@ -33,6 +34,7 @@ def list_customers():
             cursor.execute("""
                 SELECT a.id, a.customer_name, a.active,
                        COALESCE(p.monthly_limit, 100)
+                           AS monthly_limit
                 FROM api_keys a
                 LEFT JOIN customer_plans p
                     ON p.customer_id = a.id
@@ -40,70 +42,117 @@ def list_customers():
             """)
             rows = cursor.fetchall()
 
+    if not rows:
+        print("No customers found.")
+
     for row in rows:
         print(
             f"ID: {row['id']} | "
             f"Name: {row['customer_name']} | "
             f"Active: {row['active']} | "
-            f"Monthly limit: {row['coalesce']}"
+            f"Monthly limit: {row['monthly_limit']}"
         )
 
 
 def create_customer(name, limit):
+    name = name.strip()
+
+    if not name:
+        raise ValueError("Customer name cannot be empty.")
+
     if limit < 0:
         raise ValueError("Monthly limit cannot be negative.")
-
-    customer = create_postgres_key(name)
-
-    with get_postgres_connection() as db:
-        with db.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO customer_plans
-                    (customer_id, monthly_limit)
-                VALUES (%s, %s)
-                """,
-                (customer["customer_id"], limit),
-            )
-
-    print("Customer created!")
-    print("Customer ID:", customer["customer_id"])
-    import json
-    from pathlib import Path
 
     key_dir = Path.home() / ".fieldticket-keys"
     key_dir.mkdir(mode=0o700, exist_ok=True)
     key_dir.chmod(0o700)
 
-    key_file = key_dir / f"customer-{customer['customer_id']}.json"
+    customer = create_postgres_key(name)
+    customer_id = customer["customer_id"]
+    key_file = key_dir / f"customer-{customer_id}.json"
 
-    fd = os.open(
-        str(key_file),
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-        0o600,
-    )
+    try:
+        fd = os.open(
+            str(key_file),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
 
-    with os.fdopen(fd, "w") as file:
-        json.dump({
-            "customer_id": customer["customer_id"],
-            "customer": name,
-            "api_key": customer["api_key"],
-        }, file, indent=2)
+        with os.fdopen(fd, "w") as file:
+            json.dump({
+                "customer_id": customer_id,
+                "customer": name,
+                "api_key": customer["api_key"],
+            }, file, indent=2)
+            file.flush()
+            os.fsync(file.fileno())
 
-    print("API key saved privately to:", key_file)
-    print("Never share this file or commit it to GitHub.")
+        with get_postgres_connection() as db:
+            with db.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO customer_plans
+                        (customer_id, monthly_limit)
+                    VALUES (%s, %s)
+                    """,
+                    (customer_id, limit),
+                )
+
+    except Exception:
+        # Never leave a newly created key active after
+        # a failed onboarding operation.
+        try:
+            with get_postgres_connection() as db:
+                with db.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        UPDATE api_keys
+                        SET active = FALSE
+                        WHERE id = %s
+                        """,
+                        (customer_id,),
+                    )
+        except Exception:
+            print(
+                "WARNING: Could not confirm key revocation. "
+                f"Manually inspect customer {customer_id}."
+            )
+
+        try:
+            key_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        raise
+
+    print("Customer created successfully!")
+    print("Customer ID:", customer_id)
+    print("Monthly limit:", limit)
+    print("Private key file:", key_file)
 
 
 def show_usage(customer_id):
-    usage = get_postgres_usage(customer_id)
-    print(usage)
+    with get_postgres_connection() as db:
+        with db.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM api_keys WHERE id = %s",
+                (customer_id,),
+            )
+            if cursor.fetchone() is None:
+                raise ValueError("Customer ID not found.")
+
+    print(get_postgres_usage(customer_id))
 
 
 def disable_customer(customer_id):
     with get_postgres_connection() as db:
         with db.cursor() as cursor:
             cursor.execute(
-                "UPDATE api_keys SET active = FALSE WHERE id = %s",
+                """
+                UPDATE api_keys
+                SET active = FALSE
+                WHERE id = %s
+                """,
                 (customer_id,),
             )
             if cursor.rowcount == 0:
@@ -113,9 +162,13 @@ def disable_customer(customer_id):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="FieldTicket customer administration"
+    )
+
     commands = parser.add_subparsers(
-        dest="command", required=True
+        dest="command",
+        required=True,
     )
 
     commands.add_parser("list")
