@@ -1,5 +1,4 @@
 from request_limits import RequestSizeLimitMiddleware
-from request_limits import RequestSizeLimitMiddleware
 import os
 import secrets
 from datetime import date
@@ -25,7 +24,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.add_middleware(RequestSizeLimitMiddleware)
 
 app.add_middleware(RequestSizeLimitMiddleware)
 

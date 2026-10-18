@@ -150,3 +150,90 @@ def test_small_streamed_request():
         )
 
     asyncio.run(scenario())
+
+
+def test_invalid_content_length():
+    import asyncio
+    from request_limits import RequestSizeLimitMiddleware
+
+    async def scenario():
+        responses = []
+
+        async def inner_app(scope, receive, send):
+            raise AssertionError("Application should not run")
+
+        async def receive():
+            raise AssertionError("Body should not be read")
+
+        async def send(message):
+            responses.append(message)
+
+        middleware = RequestSizeLimitMiddleware(inner_app)
+
+        await middleware(
+            {
+                "type": "http",
+                "headers": [(b"content-length", b"invalid")],
+                "method": "POST",
+                "path": "/",
+                "query_string": b"",
+            },
+            receive,
+            send,
+        )
+
+        assert [
+            m["status"]
+            for m in responses
+            if m["type"] == "http.response.start"
+        ] == [400]
+
+    asyncio.run(scenario())
+
+
+def test_client_disconnect_before_body():
+    import asyncio
+    from request_limits import RequestSizeLimitMiddleware
+
+    async def scenario():
+        responses = []
+        app_called = False
+
+        async def inner_app(scope, receive, send):
+            nonlocal app_called
+            app_called = True
+
+        async def receive():
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            responses.append(message)
+
+        middleware = RequestSizeLimitMiddleware(inner_app)
+
+        await middleware(
+            {
+                "type": "http",
+                "headers": [],
+                "method": "POST",
+                "path": "/",
+                "query_string": b"",
+            },
+            receive,
+            send,
+        )
+
+        assert app_called is False
+        assert responses == []
+
+    asyncio.run(scenario())
+
+
+def test_middleware_registered_once():
+    from pathlib import Path
+
+    code = Path("main.py").read_text()
+
+    assert code.count(
+        "app.add_middleware(RequestSizeLimitMiddleware)"
+    ) == 1
