@@ -53,7 +53,7 @@ def charge_postgres_request(customer_id: int):
                 """
                 SELECT id
                 FROM api_keys
-                WHERE id = %s
+                WHERE id = %s AND active = TRUE
                 FOR UPDATE
                 """,
                 (customer_id,),
