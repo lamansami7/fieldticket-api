@@ -31,7 +31,7 @@ def money(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
-def require_api_key(
+def authenticate_customer(
     x_api_key: Annotated[str | None, Header()] = None
 ):
     if not x_api_key:
@@ -55,15 +55,20 @@ def require_api_key(
     if customer is None:
         raise HTTPException(401, "Invalid or revoked API key")
 
-    from usage_limits import initialize_usage, charge_request
-
-    initialize_usage()
-    charge_request(customer[0])
-
     return {
         "customer_id": customer[0],
         "customer_name": customer[1]
     }
+
+
+def require_api_key(
+    customer: dict = Depends(authenticate_customer)
+):
+    from usage_limits import initialize_usage, charge_request
+
+    initialize_usage()
+    charge_request(customer["customer_id"])
+    return customer
 
 
 class Labor(BaseModel):
@@ -293,3 +298,17 @@ def generate_pdf(ticket: Ticket):
             "Cache-Control": "no-store",
         },
     )
+
+
+
+@app.get("/v1/usage")
+def customer_usage(
+    customer: dict = Depends(authenticate_customer)
+):
+    from usage_limits import initialize_usage, get_usage
+
+    initialize_usage()
+    return {
+        "customer": customer["customer_name"],
+        **get_usage(customer["customer_id"])
+    }

@@ -90,3 +90,41 @@ def test_monthly_quota():
                 third.json()["detail"]
                 == "Monthly API request limit reached"
             )
+
+
+def test_usage_endpoint():
+    with tempfile.TemporaryDirectory() as directory:
+        test_db = Path(directory) / "usage.db"
+
+        with patch.object(customer_keys, "DB_PATH", test_db):
+            with customer_keys.connect() as db:
+                db.execute(
+                    """
+                    INSERT INTO api_keys
+                    (customer_name, key_hash, created_at, active)
+                    VALUES (?, ?, ?, 1)
+                    """,
+                    (
+                        TEST_CUSTOMER,
+                        hashlib.sha256(
+                            TEST_KEY.encode()
+                        ).hexdigest(),
+                        "2026-10-18T00:00:00+00:00",
+                    )
+                )
+                db.commit()
+
+            initialize_usage()
+
+            response = client.get(
+                "/v1/usage",
+                headers={"X-API-Key": TEST_KEY}
+            )
+
+            assert response.status_code == 200
+
+            data = response.json()
+
+            assert data["monthly_limit"] == 100
+            assert data["requests_used"] == 0
+            assert data["requests_remaining"] == 100

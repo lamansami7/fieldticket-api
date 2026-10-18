@@ -76,3 +76,37 @@ def charge_request(customer_id: int):
             "limit": limit,
             "remaining": limit - used - 1,
         }
+
+
+def get_usage(customer_id: int):
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    with connect() as db:
+        row = db.execute(
+            """
+            SELECT monthly_limit
+            FROM customer_plans
+            WHERE customer_id = ?
+            """,
+            (customer_id,)
+        ).fetchone()
+
+        limit = row[0] if row else 100
+
+        usage = db.execute(
+            """
+            SELECT requests
+            FROM usage_monthly
+            WHERE customer_id = ? AND month = ?
+            """,
+            (customer_id, month)
+        ).fetchone()
+
+    used = usage[0] if usage else 0
+
+    return {
+        "month": month,
+        "monthly_limit": limit,
+        "requests_used": used,
+        "requests_remaining": max(0, limit - used)
+    }
