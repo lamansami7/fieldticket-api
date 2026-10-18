@@ -11,3 +11,5 @@ __pycache__/
 *.db-wal
 *.sqlite
 *.sqlite3
+
+*.backup

@@ -55,6 +55,11 @@ def require_api_key(
     if customer is None:
         raise HTTPException(401, "Invalid or revoked API key")
 
+    from usage_limits import initialize_usage, charge_request
+
+    initialize_usage()
+    charge_request(customer[0])
+
     return {
         "customer_id": customer[0],
         "customer_name": customer[1]
