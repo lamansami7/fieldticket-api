@@ -143,17 +143,25 @@ def test_revoked_key():
         TEST_KEY.encode()
     ).hexdigest()
 
-    with customer_keys.connect() as db:
-        db.execute(
-            "UPDATE api_keys SET active = 0 WHERE key_hash = ?",
-            (key_hash,)
+    try:
+        with customer_keys.connect() as db:
+            db.execute(
+                "UPDATE api_keys SET active = 0 WHERE key_hash = ?",
+                (key_hash,)
+            )
+            db.commit()
+
+        response = client.post(
+            "/v1/tickets/calculate",
+            json=sample,
+            headers=headers
         )
-        db.commit()
 
-    response = client.post(
-        "/v1/tickets/calculate",
-        json=sample,
-        headers=headers
-    )
-
-    assert response.status_code == 401
+        assert response.status_code == 401
+    finally:
+        with customer_keys.connect() as db:
+            db.execute(
+                "UPDATE api_keys SET active = 1 WHERE key_hash = ?",
+                (key_hash,)
+            )
+            db.commit()
