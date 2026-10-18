@@ -37,37 +37,58 @@ def authenticate_customer(
     if not x_api_key:
         raise HTTPException(401, "API key required")
 
-    import hashlib
-    from customer_keys import connect
+    from database_backend import use_postgres
 
-    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+    if use_postgres():
+        from postgres_customers import authenticate_postgres_key
+        customer = authenticate_postgres_key(x_api_key)
+    else:
+        import hashlib
+        from customer_keys import connect
 
-    with connect() as db:
-        customer = db.execute(
-            """
-            SELECT id, customer_name
-            FROM api_keys
-            WHERE key_hash = ? AND active = 1
-            """,
-            (key_hash,)
-        ).fetchone()
+        key_hash = hashlib.sha256(
+            x_api_key.encode()
+        ).hexdigest()
+
+        with connect() as db:
+            row = db.execute(
+                """
+                SELECT id, customer_name
+                FROM api_keys
+                WHERE key_hash = ? AND active = 1
+                """,
+                (key_hash,),
+            ).fetchone()
+
+        customer = (
+            {
+                "customer_id": row[0],
+                "customer_name": row[1],
+            }
+            if row is not None else None
+        )
 
     if customer is None:
-        raise HTTPException(401, "Invalid or revoked API key")
+        raise HTTPException(
+            401, "Invalid or revoked API key"
+        )
 
-    return {
-        "customer_id": customer[0],
-        "customer_name": customer[1]
-    }
+    return customer
 
 
 def require_api_key(
     customer: dict = Depends(authenticate_customer)
 ):
-    from usage_limits import initialize_usage, charge_request
+    from database_backend import use_postgres
 
-    initialize_usage()
-    charge_request(customer["customer_id"])
+    if use_postgres():
+        from postgres_usage import charge_postgres_request
+        charge_postgres_request(customer["customer_id"])
+    else:
+        from usage_limits import initialize_usage, charge_request
+        initialize_usage()
+        charge_request(customer["customer_id"])
+
     return customer
 
 
@@ -305,10 +326,17 @@ def generate_pdf(ticket: Ticket):
 def customer_usage(
     customer: dict = Depends(authenticate_customer)
 ):
-    from usage_limits import initialize_usage, get_usage
+    from database_backend import use_postgres
 
-    initialize_usage()
+    if use_postgres():
+        from postgres_usage import get_postgres_usage
+        usage = get_postgres_usage(customer["customer_id"])
+    else:
+        from usage_limits import initialize_usage, get_usage
+        initialize_usage()
+        usage = get_usage(customer["customer_id"])
+
     return {
         "customer": customer["customer_name"],
-        **get_usage(customer["customer_id"])
+        **usage
     }
