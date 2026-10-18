@@ -34,7 +34,37 @@ sample = {
     "tax_rate_percent": 0
 }
 
-headers = {"X-API-Key": "test-secret-key"}
+# Use an isolated SQLite database for automated tests.
+import hashlib
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+import customer_keys
+
+_test_dir = tempfile.TemporaryDirectory()
+_test_db = Path(_test_dir.name) / "test.db"
+_db_patch = patch.object(customer_keys, "DB_PATH", _test_db)
+_db_patch.start()
+
+TEST_KEY = "ft_test_" + "a" * 32
+
+with customer_keys.connect() as db:
+    db.execute(
+        """
+        INSERT INTO api_keys
+        (customer_name, key_hash, created_at, active)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            "Automated Test Customer",
+            hashlib.sha256(TEST_KEY.encode()).hexdigest(),
+            "2026-10-18T00:00:00+00:00",
+            1
+        )
+    )
+    db.commit()
+
+headers = {"X-API-Key": TEST_KEY}
 
 
 def test_health():
@@ -103,3 +133,27 @@ def test_invalid_tax():
         headers=headers
     )
     assert response.status_code == 422
+
+
+def test_revoked_key():
+    import hashlib
+    import customer_keys
+
+    key_hash = hashlib.sha256(
+        TEST_KEY.encode()
+    ).hexdigest()
+
+    with customer_keys.connect() as db:
+        db.execute(
+            "UPDATE api_keys SET active = 0 WHERE key_hash = ?",
+            (key_hash,)
+        )
+        db.commit()
+
+    response = client.post(
+        "/v1/tickets/calculate",
+        json=sample,
+        headers=headers
+    )
+
+    assert response.status_code == 401

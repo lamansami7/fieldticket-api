@@ -34,13 +34,31 @@ def money(value: Decimal) -> Decimal:
 def require_api_key(
     x_api_key: Annotated[str | None, Header()] = None
 ):
-    expected = os.environ.get("FIELDTICKET_API_KEY")
-    if not expected:
-        raise HTTPException(503, "API key not configured")
-    if not x_api_key or not secrets.compare_digest(
-        x_api_key, expected
-    ):
-        raise HTTPException(401, "Invalid API key")
+    if not x_api_key:
+        raise HTTPException(401, "API key required")
+
+    import hashlib
+    from customer_keys import connect
+
+    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+
+    with connect() as db:
+        customer = db.execute(
+            """
+            SELECT id, customer_name
+            FROM api_keys
+            WHERE key_hash = ? AND active = 1
+            """,
+            (key_hash,)
+        ).fetchone()
+
+    if customer is None:
+        raise HTTPException(401, "Invalid or revoked API key")
+
+    return {
+        "customer_id": customer[0],
+        "customer_name": customer[1]
+    }
 
 
 class Labor(BaseModel):
