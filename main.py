@@ -1,3 +1,5 @@
+from request_limits import RequestSizeLimitMiddleware
+from request_limits import RequestSizeLimitMiddleware
 import os
 import secrets
 from datetime import date
@@ -22,6 +24,10 @@ app = FastAPI(
     description="Generate construction T&M tickets and PDF documents.",
     version="1.0.0",
 )
+
+app.add_middleware(RequestSizeLimitMiddleware)
+
+app.add_middleware(RequestSizeLimitMiddleware)
 
 CENT = Decimal("0.01")
 MAX_MONEY = Decimal("100000000")
