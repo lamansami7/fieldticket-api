@@ -86,7 +86,9 @@ def require_api_key(
     from database_backend import use_postgres
 
     if use_postgres():
+        from postgres_rate_limits import charge_postgres_rate_limit
         from postgres_usage import charge_postgres_request
+        charge_postgres_rate_limit(customer["customer_id"])
         charge_postgres_request(customer["customer_id"])
     else:
         from usage_limits import initialize_usage, charge_request
@@ -333,7 +335,9 @@ def customer_usage(
     from database_backend import use_postgres
 
     if use_postgres():
+        from postgres_rate_limits import charge_postgres_rate_limit
         from postgres_usage import get_postgres_usage
+        charge_postgres_rate_limit(customer["customer_id"])
         usage = get_postgres_usage(customer["customer_id"])
     else:
         from usage_limits import initialize_usage, get_usage
