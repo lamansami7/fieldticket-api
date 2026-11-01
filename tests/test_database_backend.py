@@ -24,8 +24,10 @@ def test_postgres_usage_endpoint():
     usage = {"month": "2026-10", "monthly_limit": 100, "requests_used": 25, "requests_remaining": 75}
     with patch.dict("os.environ", {"DATABASE_BACKEND": "postgres"}):
         with patch("postgres_customers.authenticate_postgres_key", return_value=customer):
-            with patch("postgres_usage.get_postgres_usage", return_value=usage):
-                response = client.get("/v1/usage", headers={"X-API-Key": "test-key"})
+            with patch("postgres_rate_limits.charge_postgres_rate_limit") as throttle:
+                with patch("postgres_usage.get_postgres_usage", return_value=usage):
+                    response = client.get("/v1/usage", headers={"X-API-Key": "test-key"})
+    throttle.assert_called_once_with(42)
     assert response.status_code == 200
     assert response.json()["requests_remaining"] == 75
 
