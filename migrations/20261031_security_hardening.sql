@@ -10,11 +10,11 @@ BEGIN
         CREATE ROLE fieldticket_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
     END IF;
     EXECUTE format('GRANT CONNECT ON DATABASE %I TO fieldticket_runtime', current_database());
-END $$;
+END $;
+ALTER ROLE fieldticket_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 GRANT USAGE ON SCHEMA public TO fieldticket_runtime;
 REVOKE CREATE ON SCHEMA public FROM fieldticket_runtime;
 GRANT SELECT ON TABLE public.api_keys TO fieldticket_runtime;
 GRANT SELECT ON TABLE public.customer_plans TO fieldticket_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.usage_monthly TO fieldticket_runtime;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.request_rate_limits TO fieldticket_runtime;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO fieldticket_runtime;
