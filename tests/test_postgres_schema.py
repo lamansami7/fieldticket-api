@@ -17,7 +17,7 @@ def test_postgres_schema_initialization():
         result = initialize_postgres()
 
     assert result is True
-    assert cursor.execute.call_count == 3
+    assert cursor.execute.call_count == 4
 
     statements = [
         call.args[0]
@@ -27,3 +27,4 @@ def test_postgres_schema_initialization():
     assert "CREATE TABLE IF NOT EXISTS api_keys" in statements[0]
     assert "CREATE TABLE IF NOT EXISTS usage_monthly" in statements[1]
     assert "CREATE TABLE IF NOT EXISTS customer_plans" in statements[2]
+    assert "CREATE TABLE IF NOT EXISTS request_rate_limits" in statements[3]
